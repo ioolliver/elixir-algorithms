@@ -51,4 +51,65 @@ defmodule ElixirAlgorithm.Compression.RunLength do
     acc = String.duplicate(char, repeat) <> accumulator
     do_decode(data_tail, acc)
   end
+
+  defp handle_file(path, output_name, chunk_func) do
+    path
+    |> File.stream!
+    |> Stream.map(fn chunk -> chunk_func.(chunk) end)
+    |> Stream.into(File.stream!(output_name, [:write]))
+    |> Stream.run()
+  end
+
+  @doc """
+  Encodes a file with the given path.
+
+    ## Examples
+
+        iex> RunLength.encode_file("my_file.txt")
+        {:ok, "my_file.txt.rl"}
+
+        iex> RunLength.encode_file("my_file.txt", "output.txt")
+        {:ok, "output.txt.rl"}
+  """
+  @spec encode_file(String.t()) :: {:ok, String.t()}
+  def encode_file(path), do: encode_file(path, path)
+  @spec encode_file(String.t(), String.t()) :: {:ok, String.t()}
+  def encode_file(path, output_name) do
+    output = "#{output_name}.rl"
+    handle_file(path, output, &encode_chunk/1)
+    {:ok, output}
+  end
+
+  defp encode_chunk(chunk) do
+    chunk
+    |> encode
+    |> Enum.map(fn {char, size} -> "#{size}=#{char};" end)
+  end
+
+  @doc """
+  Decodes a encoded file in the given path.
+
+    ## Examples
+
+        iex> RunLength.decode_file("my_file.rl")
+        {:ok, "my_file"}
+
+        iex> RunLength.decode_file("my_file.rl", "output.txt")
+        {:ok, "output.txt"}
+  """
+  def decode_file(path), do: decode_file(path, path)
+  def decode_file(path, output_name) do
+    handle_file(path, output_name, &decode_chunk/1)
+  end
+
+  defp decode_chunk(chunk) do
+    chunk
+    |> String.split(";")
+    |> Enum.filter(fn chunk_split -> chunk_split != "" end)
+    |> Enum.reverse()
+    |> Enum.map_join(fn chunk_data ->
+      [size | [char]] = String.split(chunk_data, "=")
+      String.duplicate(char, String.to_integer(size))
+    end)
+  end
 end
